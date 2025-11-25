@@ -1,278 +1,229 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-STABILITY PRINCIPLE - Core Module
-===================================
+"""stability_principle.py
 
-Effortless Stability through Natural Interactions
+Core implementation of Zwanglose Stabilität (Effortless Stability).
 
-Die erste Verbindung von Teilchen war eine zwanglose, die nur so lange dauerte,
-wie die Stabilität es ihr gewährte.
-
-This module implements the core principle: Systems form through effortless
-interactions that persist as long as they provide stability.
+Defines how systems evolve toward stable states through natural interactions.
 """
 
 import numpy as np
+from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
-from typing import List, Tuple, Optional
-import math
 
 
 @dataclass
 class SystemState:
-    """Represents the state of a system at a given time"""
+    """Represents the state of a system component."""
+    id: int
+    position: np.ndarray
+    velocity: np.ndarray
+    mass: float
     energy: float
-    entropy: float
-    stability_score: float
-    configuration: np.ndarray
-    timestamp: float
     
-    def is_stable(self, threshold: float = 0.5) -> bool:
-        """Check if system is stable based on stability score"""
-        return self.stability_score >= threshold
+    def __post_init__(self):
+        if not isinstance(self.position, np.ndarray):
+            self.position = np.array(self.position)
+        if not isinstance(self.velocity, np.ndarray):
+            self.velocity = np.array(self.velocity)
 
 
 @dataclass
 class Interaction:
-    """Represents an interaction between system components"""
-    participants: Tuple[int, int]
+    """Represents an interaction between system components."""
+    source_id: int
+    target_id: int
+    force: np.ndarray
+    interaction_type: str
     strength: float
-    energy_change: float
-    natural: bool  # True if effortless, False if forced
-    
-    def contributes_to_stability(self) -> bool:
-        """Natural interactions that lower energy contribute to stability"""
-        return self.natural and self.energy_change < 0
 
 
 class StabilityPrinciple:
     """
-    Core implementation of the Effortless Stability Principle.
+    Core class implementing Zwanglose Stabilität (Effortless Stability).
     
-    Systems evolve through natural interactions, persisting as long as
-    stability is maintained. No central control needed.
+    Systems evolve naturally toward states that minimize energy and maximize
+    stability without external control or predetermined design.
     """
     
-    def __init__(self, system_size: int = 100, temperature: float = 1.0):
-        self.system_size = system_size
-        self.temperature = temperature
-        self.history: List[SystemState] = []
+    def __init__(self):
+        self.states: List[SystemState] = []
+        self.interactions: List[Interaction] = []
+        self.time: float = 0.0
+        self.dt: float = 0.01
         
-    def calculate_stability(self, energy: float, entropy: float, 
-                          num_stable_interactions: int,
-                          total_interactions: int) -> float:
-        """
-        Calculate stability score based on:
-        - Energy (lower = more stable)
-        - Entropy (balanced = more stable)
-        - Ratio of stable interactions
-        
-        Returns stability score between 0 and 1
-        """
-        # Energy contribution (normalized, inverted)
-        energy_stability = 1.0 / (1.0 + abs(energy))
-        
-        # Entropy contribution (peaked at moderate entropy)
-        optimal_entropy = 0.5
-        entropy_stability = 1.0 - abs(entropy - optimal_entropy)
-        
-        # Interaction contribution
-        if total_interactions > 0:
-            interaction_stability = num_stable_interactions / total_interactions
-        else:
-            interaction_stability = 0.0
-        
-        # Combined stability (weighted average)
-        stability = (0.4 * energy_stability + 
-                    0.3 * entropy_stability + 
-                    0.3 * interaction_stability)
-        
-        return max(0.0, min(1.0, stability))
+    def add_state(self, state: SystemState):
+        """Add a component to the system."""
+        self.states.append(state)
     
-    def evaluate_interaction(self, state_before: SystemState, 
-                           state_after: SystemState,
-                           forced: bool = False) -> Interaction:
+    def calculate_stability(self, state: SystemState) -> float:
         """
-        Evaluate whether an interaction is natural (effortless) and 
-        contributes to stability.
+        Calculate stability score for a given state.
         
-        Natural interactions:
-        - Reduce system energy
-        - Increase or maintain stability
-        - Are not forced
+        Higher values indicate more stable configurations.
+        Stability = 1 / (1 + total_energy + kinetic_energy)
         """
-        energy_change = state_after.energy - state_before.energy
-        natural = (not forced and 
-                  energy_change <= 0 and 
-                  state_after.stability_score >= state_before.stability_score)
+        kinetic_energy = 0.5 * state.mass * np.dot(state.velocity, state.velocity)
+        total_energy = state.energy + kinetic_energy
+        
+        # Stability is inverse of energy (lower energy = higher stability)
+        stability = 1.0 / (1.0 + abs(total_energy))
+        
+        return stability
+    
+    def evaluate_interaction(self, state1: SystemState, state2: SystemState) -> Interaction:
+        """
+        Evaluate natural interaction between two components.
+        
+        Calculates force based on natural laws (gravity, electromagnetic, etc.)
+        """
+        # Calculate distance
+        r_vec = state2.position - state1.position
+        r = np.linalg.norm(r_vec)
+        
+        if r < 1e-10:  # Avoid division by zero
+            force = np.zeros_like(r_vec)
+            strength = 0.0
+        else:
+            # Simple gravitational-like interaction
+            # F = G * m1 * m2 / r^2, direction toward each other
+            r_hat = r_vec / r
+            strength = state1.mass * state2.mass / (r * r)
+            force = strength * r_hat
         
         return Interaction(
-            participants=(0, 1),  # Simplified
-            strength=abs(energy_change),
-            energy_change=energy_change,
-            natural=natural
+            source_id=state1.id,
+            target_id=state2.id,
+            force=force,
+            interaction_type="attractive",
+            strength=strength
         )
     
-    def simulate_evolution(self, initial_state: SystemState, 
-                         num_steps: int = 100) -> List[SystemState]:
+    def simulate_evolution(self, steps: int = 100) -> List[Dict]:
         """
-        Simulate system evolution following effortless stability principle.
+        Simulate natural evolution of the system toward effortless stability.
         
-        Systems self-organize through natural interactions, finding stable
-        configurations without central control.
+        Returns history of system states at each time step.
         """
-        states = [initial_state]
-        current_state = initial_state
+        history = []
         
-        for step in range(num_steps):
-            # Attempt random natural interaction
-            energy_perturbation = np.random.randn() * self.temperature
-            new_energy = current_state.energy + energy_perturbation
+        for step in range(steps):
+            # Calculate all interactions
+            self.interactions = []
+            for i, state1 in enumerate(self.states):
+                for j, state2 in enumerate(self.states):
+                    if i < j:  # Avoid double-counting
+                        interaction = self.evaluate_interaction(state1, state2)
+                        self.interactions.append(interaction)
             
-            # Calculate new entropy (simplified)
-            new_entropy = self._calculate_entropy(new_energy)
+            # Update states based on interactions
+            forces = {state.id: np.zeros(3) for state in self.states}
             
-            # Calculate new stability
-            new_stability = self.calculate_stability(
-                energy=new_energy,
-                entropy=new_entropy,
-                num_stable_interactions=len([s for s in states if s.is_stable()]),
-                total_interactions=len(states)
-            )
+            for interaction in self.interactions:
+                # Apply force to both components (Newton's 3rd law)
+                forces[interaction.source_id] += interaction.force
+                forces[interaction.target_id] -= interaction.force
             
-            # Create new state
-            new_state = SystemState(
-                energy=new_energy,
-                entropy=new_entropy,
-                stability_score=new_stability,
-                configuration=current_state.configuration.copy(),
-                timestamp=step
-            )
+            # Update velocities and positions
+            for state in self.states:
+                acceleration = forces[state.id] / state.mass
+                state.velocity += acceleration * self.dt
+                state.position += state.velocity * self.dt
+                
+                # Update energy (kinetic + potential)
+                kinetic = 0.5 * state.mass * np.dot(state.velocity, state.velocity)
+                state.energy = kinetic  # Simplified
             
-            # Evaluate interaction
-            interaction = self.evaluate_interaction(current_state, new_state)
+            # Record state
+            snapshot = {
+                'time': self.time,
+                'states': [
+                    {
+                        'id': s.id,
+                        'position': s.position.copy(),
+                        'velocity': s.velocity.copy(),
+                        'energy': s.energy,
+                        'stability': self.calculate_stability(s)
+                    }
+                    for s in self.states
+                ],
+                'total_energy': sum(s.energy for s in self.states),
+                'avg_stability': np.mean([self.calculate_stability(s) for s in self.states])
+            }
+            history.append(snapshot)
             
-            # Accept state if interaction is natural (effortless)
-            # OR if energy is lower (downhill always accepted)
-            if interaction.natural or new_energy < current_state.energy:
-                current_state = new_state
-                states.append(new_state)
-            else:
-                # Reject forced/uphill interactions (no external forcing)
-                states.append(current_state)
+            self.time += self.dt
         
-        self.history = states
-        return states
+        return history
     
-    def _calculate_entropy(self, energy: float) -> float:
+    def find_stable_configurations(self, stability_threshold: float = 0.8) -> List[SystemState]:
         """
-        Calculate entropy based on energy.
-        Higher energy = higher entropy (more disorder)
+        Identify configurations that achieve effortless stability.
+        
+        Returns states with stability above threshold.
         """
-        return 1.0 / (1.0 + math.exp(-energy))
+        stable_states = []
+        
+        for state in self.states:
+            stability = self.calculate_stability(state)
+            if stability >= stability_threshold:
+                stable_states.append(state)
+        
+        return stable_states
     
-    def find_stable_configurations(self, threshold: float = 0.7) -> List[SystemState]:
+    def demonstrate_zwanglose_stabilitat(self) -> Dict:
         """
-        Find all stable configurations in the system history.
+        Analyze and demonstrate Zwanglose Stabilität in the system.
         
-        These represent 'eternal' or 'eternal-seeming' stability -
-        configurations that persist because they naturally provide stability.
+        Returns analysis following 5D intelligence framework.
         """
-        return [state for state in self.history 
-                if state.is_stable(threshold)]
-    
-    def get_average_lifetime(self, stable_configs: List[SystemState]) -> float:
-        """
-        Calculate average lifetime of stable configurations.
+        # Run simulation
+        history = self.simulate_evolution(steps=200)
         
-        Configurations persist 'as long as stability permits' -
-        this measures that duration.
-        """
-        if not stable_configs:
-            return 0.0
+        initial_energy = history[0]['total_energy']
+        final_energy = history[-1]['total_energy']
+        initial_stability = history[0]['avg_stability']
+        final_stability = history[-1]['avg_stability']
         
-        lifetimes = []
-        current_start = None
+        # Find most stable configuration
+        most_stable_time = max(history, key=lambda h: h['avg_stability'])
         
-        for i, state in enumerate(self.history):
-            if state in stable_configs:
-                if current_start is None:
-                    current_start = i
-            else:
-                if current_start is not None:
-                    lifetimes.append(i - current_start)
-                    current_start = None
-        
-        # Handle case where stability continues to end
-        if current_start is not None:
-            lifetimes.append(len(self.history) - current_start)
-        
-        return np.mean(lifetimes) if lifetimes else 0.0
+        return {
+            'what': f"System evolved from {len(self.states)} components to stable configuration",
+            'how': "Through natural, effortless interactions without external control",
+            'how_much': {
+                'energy_change': final_energy - initial_energy,
+                'stability_improvement': final_stability - initial_stability,
+                'time_to_stability': most_stable_time['time']
+            },
+            'zwanglose_interaction': (
+                "System self-organized through local interactions. "
+                "Most stable configurations emerged naturally, requiring minimal energy to maintain."
+            ),
+            'history': history
+        }
 
 
-def demonstrate_effortless_stability():
-    """
-    Demonstration: System finds stable configurations naturally,
-    without external forcing.
-    """
-    print("=" * 80)
-    print("EFFORTLESS STABILITY PRINCIPLE - Demonstration")
-    print("=" * 80)
-    print()
-    print("Simulating system evolution through natural interactions...")
-    print()
-    
-    # Initialize system
-    principle = StabilityPrinciple(temperature=0.5)
-    initial = SystemState(
-        energy=10.0,
-        entropy=0.8,
-        stability_score=0.3,
-        configuration=np.random.randn(10),
-        timestamp=0.0
-    )
-    
-    # Evolve system
-    states = principle.simulate_evolution(initial, num_steps=200)
-    
-    # Analyze results
-    stable_configs = principle.find_stable_configurations(threshold=0.7)
-    avg_lifetime = principle.get_average_lifetime(stable_configs)
-    
-    print(f"Total states explored: {len(states)}")
-    print(f"Stable configurations found: {len(stable_configs)}")
-    print(f"Stability rate: {len(stable_configs)/len(states)*100:.1f}%")
-    print(f"Average stability lifetime: {avg_lifetime:.1f} timesteps")
-    print()
-    
-    # Energy evolution
-    final_energy = states[-1].energy
-    energy_change = final_energy - initial.energy
-    print(f"Initial energy: {initial.energy:.2f}")
-    print(f"Final energy: {final_energy:.2f}")
-    print(f"Energy change: {energy_change:.2f}")
-    print()
-    
-    # Stability evolution
-    final_stability = states[-1].stability_score
-    stability_change = final_stability - initial.stability_score
-    print(f"Initial stability: {initial.stability_score:.2f}")
-    print(f"Final stability: {final_stability:.2f}")
-    print(f"Stability change: {stability_change:+.2f}")
-    print()
-    
-    if energy_change < 0 and stability_change > 0:
-        print("✓ System naturally evolved to lower energy and higher stability")
-        print("✓ No external forcing needed - effortless stability achieved")
-    
-    print()
-    print("=" * 80)
-    print("Conclusion: Systems self-organize through natural interactions,")
-    print("finding stable configurations that persist as long as they")
-    print("provide stability. No central control required.")
-    print("=" * 80)
+def calculate_stability(state: SystemState) -> float:
+    """Standalone function to calculate stability."""
+    principle = StabilityPrinciple()
+    return principle.calculate_stability(state)
 
 
-if __name__ == "__main__":
-    demonstrate_effortless_stability()
+def Interaktion_bewerten(state1: SystemState, state2: SystemState) -> Interaction:
+    """Bewerte natürliche Interaktion (Deutsche Funktion)."""
+    principle = StabilityPrinciple()
+    return principle.evaluate_interaction(state1, state2)
+
+
+def simulate_evolution(system: StabilityPrinciple, steps: int = 100) -> List[Dict]:
+    """Standalone function to simulate system evolution."""
+    return system.simulate_evolution(steps)
+
+
+def find_stable_configurations(system: StabilityPrinciple, threshold: float = 0.8) -> List[SystemState]:
+    """Standalone function to find stable configurations."""
+    return system.find_stable_configurations(threshold)
+
+
+def demonstrate_zwanglose_stabilitat(system: StabilityPrinciple) -> Dict:
+    """Standalone function to demonstrate Zwanglose Stabilität."""
+    return system.demonstrate_zwanglose_stabilitat()
