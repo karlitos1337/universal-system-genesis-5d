@@ -99,29 +99,53 @@ def create_hydrogen_atom():
         'electron': electron_props
     }
     
-    state = SystemState(
-        components=components,
-        energy=-13.6,  # Hydrogen ground state energy in eV
-        entropy=0.1,   # Low entropy = ordered
-        complexity=1.0 # Simplest atom
+    # Create system states for proton and electron
+    proton_state = SystemState(
+        id=1,
+        position=np.array([0.0, 0.0, 0.0]),  # Nucleus at origin
+        velocity=np.array([0.0, 0.0, 0.0]),
+        mass=proton.mass,
+        energy=-13.6  # Hydrogen ground state energy in eV
+    )
+    
+    electron_state = SystemState(
+        id=2,
+        position=np.array([distance, 0.0, 0.0]),  # At Bohr radius
+        velocity=np.array([0.0, 0.0, 0.0]),
+        mass=electron.mass,
+        energy=0.0
     )
     
     # Create interaction representation
+    # Create interaction representation
+    # Calculate force vector between particles
+    r_vec = electron_state.position - proton_state.position
+    r = np.linalg.norm(r_vec)
+    r_hat = r_vec / r if r > 0 else np.zeros(3)
+    force_magnitude = strength  # Use calculated strength
+    force = force_magnitude * r_hat
+    
     bond = Interaction(
-        type="electromagnetic",
-        strength=strength,
-        energy_cost=0.2,  # Very low cost = effortless
-        participants=['proton', 'electron']
+        source_id=proton_state.id,
+        target_id=electron_state.id,
+        force=force,
+        interaction_type="attractive",
+        strength=strength
     )
     
-    stability = principle.calculate_stability(state)
-    bond_quality = principle.evaluate_interaction(bond, state)
+    # Calculate stability for both particles
+    proton_stability = principle.calculate_stability(proton_state)
+    electron_stability = principle.calculate_stability(electron_state)
+    stability = (proton_stability + electron_stability) / 2  # Average stability
+    
+    # Evaluate the interaction between the two particles
+    bond_interaction = principle.evaluate_interaction(proton_state, electron_state)
     
     print("--- Stabilitätsanalyse ---")
     print(f"System-Stabilität: {stability:.3f}")
-    print(f"Bindungsqualität: {bond_quality:.3f}")
-    print(f"Energie: {state.energy} eV")
-    print()
+    print(f"System-Stabilität: {stability:.3f}")
+    print(f"Bindungsstärke: {bond_interaction.strength:.3f}")
+    print(f"Energie: {proton_state.energy} eV")
     
     # Key insight
     print("✅ ZWANGLOSE STABILITÄT BESTÄTIGT")
@@ -141,7 +165,7 @@ def create_hydrogen_atom():
     print("Ohne Manager. Ohne CEO. Ohne Hierarchie.")
     print()
     
-    return state, bond, stability
+    return return proton_state, electron_state, bond, stability
 
 
 def demonstrate_unstable_pairing():
@@ -238,7 +262,7 @@ def main():
     print()
     
     # Example 1: Stable bond (Hydrogen)
-    state, bond, stability = create_hydrogen_atom()
+    proton_state, electron_state, bond, stability = create_hydrogen_atom()
     print()
     
     # Example 2: Unstable pairing
